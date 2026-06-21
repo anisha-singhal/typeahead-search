@@ -1,0 +1,23 @@
+{
+  "name": "search-typeahead",
+  "version": "1.0.0",
+  "description": "A search typeahead system with prefix suggestions, a consistent-hashed distributed cache, trending searches, and batched writes.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "load": "node scripts/load-data.js"
+  },
+  "keywords": [
+    "typeahead",
+    "autocomplete",
+    "consistent-hashing",
+    "cache",
+    "sqlite"
+  ],
+  "author": "anisha-singhal",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2"
+  }
+}
