@@ -214,3 +214,11 @@ segButtons.forEach((btn) =>
 // Initial load
 loadTrending();
 loadStats();
+
+// Optional deep link: /?q=<prefix> prefills the box and shows suggestions.
+const initialQuery = new URLSearchParams(location.search).get('q');
+if (initialQuery) {
+  input.value = initialQuery;
+  input.focus();
+  fetchSuggestions(initialQuery);
+}

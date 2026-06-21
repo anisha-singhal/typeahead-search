@@ -18,20 +18,36 @@ npm start        # serves the API + UI on http://localhost:3000
 Then open <http://localhost:3000>, start typing, and submit a few searches to see
 trending update.
 
+## Screenshots
+
+| Home (trending + live stats) | Suggestions as you type |
+|------------------------------|-------------------------|
+| ![Home](screenshots/landing.png) | ![Suggestions](screenshots/suggestions.png) |
+
 ## Tech stack
 
 | Layer    | Choice                                  | Why |
 |----------|-----------------------------------------|-----|
 | Backend  | Node.js + Express                       | Simple, widely taught |
 | Store    | SQLite (`better-sqlite3`)               | Durable, single file, no DB server to run |
-| Cache    | In-process logical nodes + consistent hashing | Distributed cache behaviour with zero external services |
+| Cache    | Redis (3 logical nodes) + consistent hashing | Distributed cache, routed by a hash ring |
 | Frontend | Vanilla HTML/CSS/JS                      | No build step, easy to read |
 
-> **On the cache:** the cache is split into several **logical nodes**, and a consistent-hash
-> ring decides which node owns each prefix. Here each node is an in-process map so the
-> project runs with a single `npm start`. In a production deployment each node would be a
-> separate Redis instance addressed by the **same ring** — only the storage changes, the
-> routing logic in `ring.js` stays identical.
+> **On the cache:** the cache is split into **3 logical nodes**, and a consistent-hash ring
+> (`ring.js`) decides which node owns each prefix. The logical nodes are three Redis
+> databases (`0`, `1`, `2`) on one Redis instance, each addressed by its own client. If
+> Redis is not running, the app **automatically falls back to an in-process cache** using
+> the same ring, so it still works with a single `npm start` — only the storage changes, the
+> routing logic stays identical. `GET /stats` and `GET /cache/debug` report which backend is
+> active (`redis` or `memory`).
+
+### Running Redis (optional but recommended)
+
+```bash
+docker run -d --name typeahead-redis -p 6379:6379 redis:7-alpine
+```
+
+Then `npm start` will connect automatically. Without it, the in-memory fallback is used.
 
 ## Architecture
 
@@ -83,8 +99,9 @@ curl "http://localhost:3000/suggest?q=iph"     # again -> "cache":"hit", ~0.04 m
 - **Query-count storage** — one SQLite table `queries(query PK, count, last_searched,
   trend_score)`.
 - **Distributed cache + consistent hashing** — `ring.js` builds an MD5 hash ring with 150
-  virtual nodes per logical node; `cache.js` routes each prefix to its owning node. Entries
-  expire after a TTL and are invalidated when counts change.
+  virtual nodes per logical node; `cache.js` routes each prefix to its owning Redis node
+  (DB 0/1/2). Entries expire after a TTL and are invalidated when counts change. Run
+  `npm run hash-demo` to see the ring distribute keys and remap only ~1/N on node changes.
 - **Trending searches** — `trending.js` blends all-time popularity with a time-decayed
   recency score (half-life 1 hour), so brief spikes fade instead of ranking forever.
 - **Batch writes** — `batch.js` buffers searches in memory, aggregates repeats, and flushes
@@ -105,12 +122,21 @@ src/
   normalize.js  prefix/query normalization
   db.js         SQLite schema, prefix range scan, batch transaction
   ring.js       consistent-hash ring (MD5 + virtual nodes)
-  cache.js      logical cache nodes routed by the ring
+  cache.js      Redis-backed logical cache nodes (in-memory fallback), routed by the ring
   suggest.js    cache-first read path + ranking
   trending.js   recency-aware ranking (decay + blend)
   batch.js      write-behind buffer + flush
   metrics.js    counters + latency percentiles
   server.js     Express routes
-scripts/load-data.js   dataset generator
-public/                web UI (index.html, style.css, app.js)
+scripts/
+  load-data.js  dataset generator
+  benchmark.js  latency + cache + write-reduction load test  (npm run bench)
+  hash-demo.js  consistent-hashing distribution demo          (npm run hash-demo)
+public/         web UI (index.html, style.css, app.js)
+docs/           ARCHITECTURE.md, PERFORMANCE.md
 ```
+
+## Performance
+
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for measured latency (p50/p95/p99), cache hit
+rate, and the batch write-reduction factor, plus sample consistent-hashing output.
