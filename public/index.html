@@ -1,39 +1,59 @@
-<div class="page">
-  <header>
-    <h1>Search Typeahead</h1>
-    <p class="sub">Type to get suggestions. Submit to record a search.</p>
-  </header>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Search Typeahead</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div class="badge">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+      <h1>Search Typeahead</h1>
+      <p class="tagline">Start typing for instant suggestions. Submit a search to record it.</p>
+    </header>
 
-  <div class="mode-row">
-    <label><input type="radio" name="mode" value="basic" checked /> Basic (by popularity)</label>
-    <label><input type="radio" name="mode" value="trending" /> Trending (popularity + recency)</label>
-  </div>
+    <div class="controls">
+      <div class="segmented" role="tablist" aria-label="Ranking mode">
+        <button class="seg active" data-mode="basic" role="tab" aria-selected="true">Popularity</button>
+        <button class="seg" data-mode="trending" role="tab" aria-selected="false">Trending</button>
+      </div>
+    </div>
 
-  <div class="search-wrap">
-    <form id="search-form" autocomplete="off">
-      <input
-        id="search-input"
-        type="text"
-        placeholder="Search for anything..."
-        aria-label="Search"
-        aria-autocomplete="list"
-      />
-      <button type="submit">Search</button>
+    <form id="search-form" class="search" autocomplete="off">
+      <span class="search-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </span>
+      <input id="search-input" type="text" placeholder="Search for anything…" aria-label="Search" aria-autocomplete="list" />
+      <button type="submit" class="go">Search</button>
+      <ul id="suggestions" class="suggestions" role="listbox"></ul>
     </form>
-    <ul id="suggestions" class="suggestions" role="listbox"></ul>
-    <div id="status" class="status"></div>
-  </div>
 
-  <div id="response" class="response"></div>
+    <div id="status" class="status" role="status"></div>
+    <div id="response" class="response"></div>
 
-  <section class="trending">
-    <h2>Trending searches</h2>
-    <ol id="trending-list" class="trending-list"></ol>
-  </section>
+    <section class="card trending-card">
+      <div class="card-head">
+        <h2>Trending searches</h2>
+        <span class="live"><span class="pulse"></span>live</span>
+      </div>
+      <ol id="trending-list" class="trending-list"></ol>
+    </section>
 
-  <footer>
-    <span id="meta" class="meta"></span>
-  </footer>
-</div>
+    <section class="stats" id="stats" aria-label="System stats"></section>
 
-<script src="app.js"></script>
+    <footer class="endpoints">
+      <code>GET /suggest</code>
+      <code>POST /search</code>
+      <code>GET /trending</code>
+      <code>GET /cache/debug</code>
+      <code>GET /stats</code>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

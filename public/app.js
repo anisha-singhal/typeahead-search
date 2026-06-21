@@ -1,5 +1,5 @@
-// Frontend logic: debounced suggestions, keyboard navigation, search submission,
-// and a trending panel. Talks to the backend on the same origin.
+// Frontend logic: debounced suggestions with prefix highlighting, keyboard
+// navigation, search submission, a live trending panel, and a system-stats bar.
 
 const input = document.getElementById('search-input');
 const form = document.getElementById('search-form');
@@ -7,34 +7,53 @@ const list = document.getElementById('suggestions');
 const status = document.getElementById('status');
 const response = document.getElementById('response');
 const trendingList = document.getElementById('trending-list');
-const meta = document.getElementById('meta');
+const statsEl = document.getElementById('stats');
+const segButtons = document.querySelectorAll('.seg');
 
-const DEBOUNCE_MS = 250;
+const DEBOUNCE_MS = 200;
 let debounceTimer = null;
 let activeIndex = -1; // highlighted suggestion for keyboard nav
 let current = []; // current suggestion list
+let mode = 'basic';
 
-function selectedMode() {
-  const checked = document.querySelector('input[name="mode"]:checked');
-  return checked ? checked.value : 'basic';
-}
+const SEARCH_ICON =
+  '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+
+const fmt = (n) => (typeof n === 'number' ? n.toLocaleString() : n);
 
 // --- Suggestions -----------------------------------------------------------
 
-function renderSuggestions(items) {
+function renderSuggestions(items, prefix) {
   current = items;
   activeIndex = -1;
   list.innerHTML = '';
   for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const li = document.createElement('li');
     li.setAttribute('role', 'option');
     li.dataset.index = i;
-    li.innerHTML = `<span class="query"></span><span class="count"></span>`;
-    li.querySelector('.query').textContent = items[i].query;
-    li.querySelector('.count').textContent = items[i].count.toLocaleString();
+
+    const icon = document.createElement('span');
+    icon.className = 'q-icon';
+    icon.innerHTML = SEARCH_ICON;
+
+    // Show the typed prefix normally and bold the completion (Google-style).
+    const text = document.createElement('span');
+    text.className = 'q-text';
+    const typed = document.createElement('span');
+    typed.textContent = item.query.slice(0, prefix.length);
+    const completion = document.createElement('b');
+    completion.textContent = item.query.slice(prefix.length);
+    text.append(typed, completion);
+
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = fmt(item.count);
+
+    li.append(icon, text, count);
     li.addEventListener('mousedown', (e) => {
-      e.preventDefault(); // keep focus so the form can submit
-      submitSearch(items[i].query);
+      e.preventDefault(); // keep input focus so the form can submit
+      submitSearch(item.query);
     });
     list.appendChild(li);
   }
@@ -52,20 +71,25 @@ async function fetchSuggestions(prefix) {
     status.textContent = '';
     return;
   }
-  status.classList.remove('error');
-  status.textContent = 'Loading...';
+  status.className = 'status';
+  status.textContent = 'Searching…';
   try {
-    const url = `/suggest?q=${encodeURIComponent(prefix)}&mode=${selectedMode()}`;
+    const url = `/suggest?q=${encodeURIComponent(prefix)}&mode=${mode}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    renderSuggestions(data.suggestions || []);
-    status.textContent = data.suggestions.length
-      ? `${data.suggestions.length} results · ${data.cache} · ${data.node} · ${data.tookMs} ms`
-      : 'No matches';
+    renderSuggestions(data.suggestions || [], data.query || '');
+    if (data.suggestions.length) {
+      status.innerHTML =
+        `<span class="tag ${data.cache}">${data.cache}</span>` +
+        `<span class="tag">${data.node}</span>` +
+        `${data.suggestions.length} results · ${data.tookMs} ms`;
+    } else {
+      status.textContent = 'No matches';
+    }
   } catch (err) {
     clearSuggestions();
-    status.classList.add('error');
+    status.className = 'status error';
     status.textContent = `Could not load suggestions: ${err.message}`;
   }
 }
@@ -73,9 +97,7 @@ async function fetchSuggestions(prefix) {
 function highlight(index) {
   const items = list.querySelectorAll('li');
   items.forEach((li, i) => li.classList.toggle('active', i === index));
-  if (index >= 0 && items[index]) {
-    input.value = current[index].query;
-  }
+  if (index >= 0 && current[index]) input.value = current[index].query;
 }
 
 // --- Search submission -----------------------------------------------------
@@ -85,7 +107,6 @@ async function submitSearch(query) {
   if (!q) return;
   input.value = q;
   clearSuggestions();
-  response.textContent = '';
   try {
     const res = await fetch('/search', {
       method: 'POST',
@@ -93,10 +114,12 @@ async function submitSearch(query) {
       body: JSON.stringify({ query: q }),
     });
     const data = await res.json();
-    response.textContent = `Server response: "${data.message}" (recorded "${q}")`;
-    // Counts update after the next batch flush; refresh trending shortly after.
-    setTimeout(loadTrending, 600);
+    response.className = 'response show';
+    response.textContent = `Server response: "${data.message}" — recorded "${q}"`;
+    // Counts update on the next batch flush; refresh trending + stats shortly after.
+    setTimeout(() => { loadTrending(); loadStats(); }, 700);
   } catch (err) {
+    response.className = 'response show';
     response.textContent = `Search failed: ${err.message}`;
   }
 }
@@ -108,22 +131,48 @@ async function loadTrending() {
     const res = await fetch('/trending?limit=10');
     const data = await res.json();
     trendingList.innerHTML = '';
-    for (const item of data.trending || []) {
+    const items = data.trending || [];
+    trendingList.classList.toggle('empty', items.length === 0);
+    for (const item of items) {
       const li = document.createElement('li');
-      li.innerHTML = `<span class="q"></span><span class="count"></span>`;
-      li.querySelector('.q').textContent = item.query;
-      li.querySelector('.count').textContent = `(${item.count.toLocaleString()})`;
+      const q = document.createElement('span');
+      q.className = 'q';
+      q.textContent = item.query;
+      const c = document.createElement('span');
+      c.className = 'count';
+      c.textContent = fmt(item.count);
+      li.append(q, c);
       trendingList.appendChild(li);
     }
   } catch (err) {
-    // Trending is non-critical; leave the panel empty on failure.
+    /* trending is non-critical */
+  }
+}
+
+// --- System stats ----------------------------------------------------------
+
+function statCard(value, label) {
+  return `<div class="stat"><div class="v">${value}</div><div class="k">${label}</div></div>`;
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch('/stats');
+    const s = await res.json();
+    statsEl.innerHTML =
+      statCard(fmt(s.datasetSize), 'queries') +
+      statCard(`${Math.round((s.hitRate || 0) * 100)}%`, 'cache hit rate') +
+      statCard(`${s.writeReduction || 0}×`, 'write reduction') +
+      statCard(`${s.latencyMs ? s.latencyMs.p95 : 0} ms`, 'p95 latency');
+  } catch (err) {
+    /* stats are non-critical */
   }
 }
 
 // --- Events ----------------------------------------------------------------
 
 input.addEventListener('input', () => {
-  clearTimeout(debounceTimer); // debounce so we don't call the backend per keystroke
+  clearTimeout(debounceTimer); // debounce so we don't hit the backend per keystroke
   const value = input.value;
   debounceTimer = setTimeout(() => fetchSuggestions(value), DEBOUNCE_MS);
 });
@@ -149,10 +198,19 @@ form.addEventListener('submit', (e) => {
   submitSearch(chosen);
 });
 
-document.querySelectorAll('input[name="mode"]').forEach((radio) =>
-  radio.addEventListener('change', () => fetchSuggestions(input.value))
+segButtons.forEach((btn) =>
+  btn.addEventListener('click', () => {
+    segButtons.forEach((b) => {
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
+    btn.classList.add('active');
+    btn.setAttribute('aria-selected', 'true');
+    mode = btn.dataset.mode;
+    fetchSuggestions(input.value);
+  })
 );
 
 // Initial load
-meta.textContent = 'GET /suggest · POST /search · GET /trending · GET /cache/debug · GET /stats';
 loadTrending();
+loadStats();
