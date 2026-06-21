@@ -57,10 +57,13 @@ This document explains the main design choices and the trade-offs behind them.
 - **Cache strategy:** read-through with a TTL (5 min). On a miss we read SQLite, rank, and
   populate the owning node. When a batch flush changes counts, we invalidate the affected
   prefixes so stale suggestions don't linger.
-- **Why in-process maps instead of Redis:** the routing/ownership logic is what the
-  assignment cares about, and it is identical whether a node is a local map or a remote Redis
-  instance. Using maps keeps the project to a single `npm start` with no external services.
-  Swapping in Redis means changing only the storage calls inside `cache.js`.
+- **Backend (Redis, with fallback):** the 3 logical nodes are 3 Redis databases (`0`, `1`,
+  `2`) on one Redis instance, each addressed by its own client. The consistent-hash ring
+  picks the node; the chosen client does the `GET`/`SET`/`DEL`. If Redis is unreachable, the
+  cache transparently falls back to in-process maps using the **same ring** — only the
+  storage calls in `cache.js` differ, the routing is identical. `GET /stats` reports the
+  active backend (`redis` or `memory`). This mirrors how a real deployment would point the
+  same ring at separate Redis nodes.
 
 ## 3. Trending: popularity blended with recency
 

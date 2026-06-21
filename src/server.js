@@ -2,7 +2,7 @@
 const path = require('path');
 const express = require('express');
 const { openDb, rowCount } = require('./db');
-const { DistributedCache } = require('./cache');
+const { createCache } = require('./cache');
 const { Metrics } = require('./metrics');
 const { BatchWriter } = require('./batch');
 const { getSuggestions } = require('./suggest');
@@ -10,9 +10,9 @@ const { getTrending } = require('./trending');
 const { normalize } = require('./normalize');
 const config = require('./config');
 
-function createApp() {
+async function createApp() {
   const db = openDb();
-  const cache = new DistributedCache();
+  const cache = await createCache(); // Redis if available, else in-memory
   const metrics = new Metrics();
   const ctx = { db, cache, metrics };
   const batch = new BatchWriter(ctx);
@@ -24,10 +24,10 @@ function createApp() {
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   // GET /suggest?q=<prefix>&mode=basic|trending
-  app.get('/suggest', (req, res) => {
+  app.get('/suggest', async (req, res) => {
     const start = process.hrtime.bigint();
     const mode = req.query.mode === 'trending' ? 'trending' : 'basic';
-    const result = getSuggestions(ctx, req.query.q || '', mode);
+    const result = await getSuggestions(ctx, req.query.q || '', mode);
     const ms = Number(process.hrtime.bigint() - start) / 1e6;
     metrics.recordLatency(ms);
     res.json({
@@ -54,26 +54,28 @@ function createApp() {
   });
 
   // GET /cache/debug?prefix=<prefix> -> which node owns the prefix and hit/miss state
-  app.get('/cache/debug', (req, res) => {
+  app.get('/cache/debug', async (req, res) => {
     const prefix = normalize(req.query.prefix || '');
     if (!prefix) return res.status(400).json({ message: 'prefix is required' });
-    const basic = cache.get(prefix, `suggest:basic:${prefix}`);
-    const trending = cache.get(prefix, `suggest:trending:${prefix}`);
+    const basic = await cache.get(prefix, `suggest:basic:${prefix}`);
+    const trending = await cache.get(prefix, `suggest:trending:${prefix}`);
     res.json({
       prefix,
+      backend: cache.backend,
       node: cache.nodeFor(prefix),
       basic: { cached: basic.hit },
       trending: { cached: trending.hit },
-      nodeSizes: cache.sizes(),
+      nodeSizes: await cache.sizes(),
     });
   });
 
   // GET /stats -> performance + cache + write-reduction report
-  app.get('/stats', (req, res) => {
+  app.get('/stats', async (req, res) => {
     res.json({
       datasetSize: rowCount(db),
+      cacheBackend: cache.backend,
       cacheNodes: cache.nodes,
-      cacheNodeSizes: cache.sizes(),
+      cacheNodeSizes: await cache.sizes(),
       ...metrics.snapshot(),
     });
   });
@@ -81,16 +83,17 @@ function createApp() {
   return { app, ctx, batch, db, cache };
 }
 
-function start() {
-  const { app, batch, db, cache } = createApp();
+async function start() {
+  const { app, batch, db, cache } = await createApp();
   const server = app.listen(config.PORT, () => {
     console.log(`Search typeahead running on http://localhost:${config.PORT}`);
-    console.log(`Dataset rows: ${rowCount(db)} | cache nodes: ${cache.nodes.join(', ')}`);
+    console.log(`Dataset rows: ${rowCount(db)} | cache: ${cache.backend} (${cache.nodes.join(', ')})`);
   });
 
-  const shutdown = () => {
+  const shutdown = async () => {
     console.log('\nShutting down: flushing batch buffer...');
     batch.stop(); // final flush so no buffered searches are lost
+    if (cache.close) { try { await cache.close(); } catch { /* ignore */ } }
     server.close(() => {
       db.close();
       process.exit(0);

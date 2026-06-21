@@ -13,14 +13,14 @@ function rankBasic(rows, limit) {
 //   1. normalize the prefix (empty -> no suggestions)
 //   2. look in the cache node that owns this prefix
 //   3. on a miss, range-scan SQLite, rank, then populate the cache (read-through)
-function getSuggestions(ctx, rawPrefix, mode = 'basic') {
+async function getSuggestions(ctx, rawPrefix, mode = 'basic') {
   const prefix = normalize(rawPrefix);
   if (!prefix) return { prefix, mode, cache: 'skip', node: null, suggestions: [] };
 
   const useTrending = mode === 'trending';
   const key = `suggest:${useTrending ? 'trending' : 'basic'}:${prefix}`;
 
-  const cached = ctx.cache.get(prefix, key);
+  const cached = await ctx.cache.get(prefix, key);
   if (cached.hit) {
     ctx.metrics.cacheHit();
     return { prefix, mode, cache: 'hit', node: cached.node, suggestions: cached.value };
@@ -34,7 +34,7 @@ function getSuggestions(ctx, rawPrefix, mode = 'basic') {
     ? blendRank(rows, Date.now(), TREND_ALPHA, TREND_HALF_LIFE_MS, MAX_SUGGESTIONS)
     : rankBasic(rows, MAX_SUGGESTIONS);
 
-  const node = ctx.cache.set(prefix, key, suggestions);
+  const node = await ctx.cache.set(prefix, key, suggestions);
   return { prefix, mode, cache: 'miss', node, suggestions };
 }
 

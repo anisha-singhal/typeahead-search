@@ -53,10 +53,11 @@ class BatchWriter {
   }
 
   // Counts changed, so cached suggestions for this query's prefixes are now stale.
+  // Invalidation is best-effort and fire-and-forget (the cache backend may be async).
   _invalidate(query) {
     const upto = Math.min(query.length, MAX_PREFIX_INVALIDATE);
     for (let i = 1; i <= upto; i++) {
-      this.ctx.cache.invalidatePrefix(query.slice(0, i));
+      Promise.resolve(this.ctx.cache.invalidatePrefix(query.slice(0, i))).catch(() => {});
     }
   }
 
