@@ -1,0 +1,39 @@
+<div class="page">
+  <header>
+    <h1>Search Typeahead</h1>
+    <p class="sub">Type to get suggestions. Submit to record a search.</p>
+  </header>
+
+  <div class="mode-row">
+    <label><input type="radio" name="mode" value="basic" checked /> Basic (by popularity)</label>
+    <label><input type="radio" name="mode" value="trending" /> Trending (popularity + recency)</label>
+  </div>
+
+  <div class="search-wrap">
+    <form id="search-form" autocomplete="off">
+      <input
+        id="search-input"
+        type="text"
+        placeholder="Search for anything..."
+        aria-label="Search"
+        aria-autocomplete="list"
+      />
+      <button type="submit">Search</button>
+    </form>
+    <ul id="suggestions" class="suggestions" role="listbox"></ul>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div id="response" class="response"></div>
+
+  <section class="trending">
+    <h2>Trending searches</h2>
+    <ol id="trending-list" class="trending-list"></ol>
+  </section>
+
+  <footer>
+    <span id="meta" class="meta"></span>
+  </footer>
+</div>
+
+<script src="app.js"></script>
