@@ -78,3 +78,24 @@ Keys remapped when adding the 4th node: 186/702 (26.5%)
 Adding a node remaps only ~1/N of keys (26.5% ≈ the ideal 25%), versus ~75% for a naive
 modulo scheme. This is the property that lets cache nodes be added or removed without
 invalidating almost the entire cache.
+
+## Verified on Redis (Docker)
+
+Run with `docker compose up --build` (app + Redis). The cache then uses Redis as its
+backend — confirmed end-to-end:
+
+- `GET /stats` → `"cacheBackend":"redis"`, dataset 120,000 queries.
+- Suggestion read path through Redis: first call **miss ≈ 2.88 ms**, immediate repeat **hit ≈ 0.81 ms**.
+- `GET /cache/debug?prefix=mac` → `{"backend":"redis","node":"cache-node-1", ... "nodeSizes":{"cache-node-0":4,"cache-node-1":7,"cache-node-2":5}}`
+
+The 3 logical nodes are Redis databases 0/1/2 on one instance, and the consistent-hash ring
+distributes cached prefixes across them. Inspected with `redis-cli -n <db> KEYS '*'`:
+
+```
+DB 0 (cache-node-0) — 4 keys:  suggest:basic:cheap   suggest:basic:news    suggest:basic:buy    suggest:basic:goa
+DB 1 (cache-node-1) — 7 keys:  suggest:basic:mac     suggest:basic:react   suggest:basic:ip     suggest:basic:gym ...
+DB 2 (cache-node-2) — 5 keys:  suggest:basic:samsung suggest:basic:iph     suggest:basic:pizza  suggest:basic:a
+```
+
+This confirms the distributed cache and consistent-hash routing work against real Redis,
+not only the in-memory fallback.
