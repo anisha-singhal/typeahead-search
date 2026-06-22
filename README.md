@@ -9,11 +9,27 @@ writes**.
 
 ## Quick start
 
+### Option A — Docker (runs the app + Redis together)
+
+```bash
+docker compose up --build
+```
+
+This starts Redis and the app (seeding the dataset on boot) on
+<http://localhost:3000>, with the cache backed by Redis — `GET /stats` shows
+`"cacheBackend":"redis"`.
+
+### Option B — Node directly
+
 ```bash
 npm install
 npm run load     # seed the dataset (~120k queries) into SQLite
 npm start        # serves the API + UI on http://localhost:3000
 ```
+
+Without a running Redis, Option B uses the in-memory cache fallback (same consistent
+hashing). To use Redis with Option B, start one first:
+`docker run -d -p 6379:6379 redis:7-alpine`.
 
 Then open <http://localhost:3000>, start typing, and submit a few searches to see
 trending update.

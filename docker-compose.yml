@@ -1,0 +1,29 @@
+# Runs the whole system: the Node app + Redis (the distributed cache backend).
+#
+#   docker compose up --build
+#
+# The app seeds the dataset on boot and serves the API + UI on http://localhost:3000.
+# It connects to the Redis service via REDIS_URL, so /stats shows "cacheBackend":"redis".
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: typeahead-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: typeahead-app
+    ports:
+      - "3000:3000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=3000
+    depends_on:
+      redis:
+        condition: service_healthy
