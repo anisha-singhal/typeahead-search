@@ -116,8 +116,9 @@ async function submitSearch(query) {
     const data = await res.json();
     response.className = 'response show';
     response.textContent = `Server response: "${data.message}" — recorded "${q}"`;
-    // Counts update on the next batch flush; refresh trending + stats shortly after.
-    setTimeout(() => { loadTrending(); loadStats(); }, 700);
+    // Counts only land after the next batch flush (every ~2s), so refresh once the
+    // flush has had time to run. The periodic refresh below keeps it live after that.
+    setTimeout(() => { loadTrending(); loadStats(); }, 2300);
   } catch (err) {
     response.className = 'response show';
     response.textContent = `Search failed: ${err.message}`;
@@ -211,9 +212,10 @@ segButtons.forEach((btn) =>
   })
 );
 
-// Initial load
+// Initial load + keep the "live" trending panel and stats fresh.
 loadTrending();
 loadStats();
+setInterval(() => { loadTrending(); loadStats(); }, 3000);
 
 // Optional deep link: /?q=<prefix> prefills the box and shows suggestions.
 const initialQuery = new URLSearchParams(location.search).get('q');
