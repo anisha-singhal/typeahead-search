@@ -47,6 +47,22 @@ function prefixSearch(db, prefix, limit) {
     .all(lo, hi, limit);
 }
 
+// Candidates for a prefix ranked by recent activity (trend_score), not all-time
+// count. Used for trending mode so a surging query can be promoted even if its
+// all-time count is still small. Only rows with some activity are returned.
+function prefixSearchByRecency(db, prefix, limit) {
+  const { lo, hi } = prefixRange(prefix);
+  return db
+    .prepare(
+      `SELECT query, count, last_searched, trend_score
+         FROM queries
+        WHERE query >= ? AND query < ? AND trend_score > 0
+        ORDER BY trend_score DESC
+        LIMIT ?`
+    )
+    .all(lo, hi, limit);
+}
+
 // Most recently active queries; the trending layer re-scores these with time decay.
 function recentPool(db, limit) {
   return db
@@ -107,4 +123,4 @@ function rowCount(db) {
   return db.prepare('SELECT COUNT(*) AS n FROM queries').get().n;
 }
 
-module.exports = { openDb, prefixSearch, recentPool, applyBatch, bulkInsert, rowCount, prefixRange };
+module.exports = { openDb, prefixSearch, prefixSearchByRecency, recentPool, applyBatch, bulkInsert, rowCount, prefixRange };
