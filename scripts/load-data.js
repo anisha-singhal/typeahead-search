@@ -70,6 +70,25 @@ function buildDataset(target) {
   return rows;
 }
 
+// A few queries are marked as "recently trending" so the Trending feed is populated
+// and the Popularity-vs-Trending toggle shows a visible difference out of the box
+// (otherwise, on a brand-new dataset nothing has been searched yet, so the two modes
+// are identical). These all exist as generated 2-grams.
+const TRENDING_SEED = [
+  'best pizza', 'goa trip', 'java tutorial', 'buy laptop', 'cheap flight',
+  'react course', 'best laptop', 'paris hotel', 'gym workout', 'resume tips',
+  'movie review', 'bitcoin price',
+];
+
+function seedTrending(db) {
+  const now = Date.now();
+  const update = db.prepare('UPDATE queries SET trend_score = ?, last_searched = ? WHERE query = ?');
+  const run = db.transaction(() => {
+    TRENDING_SEED.forEach((q, i) => update.run(200 - i * 12, now, q));
+  });
+  run();
+}
+
 function parseTarget() {
   const idx = process.argv.indexOf('--target');
   if (idx !== -1 && process.argv[idx + 1]) {
@@ -90,8 +109,10 @@ function main() {
   db.exec('DELETE FROM queries;'); // reset so counts stay deterministic across runs
   bulkInsert(db, rows);
 
+  seedTrending(db);
   console.log(`Done. Dataset size: ${rowCount(db)} queries.`);
   console.log('Sample:', rows.slice(0, 3).map(([q, c]) => `${q} (${c})`).join(', '));
+  console.log(`Seeded ${TRENDING_SEED.length} trending queries (e.g. "best pizza", "goa trip").`);
   db.close();
 }
 

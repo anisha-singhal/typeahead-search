@@ -113,6 +113,10 @@ curl "http://localhost:3000/suggest?q=iph"     # again -> "cache":"hit", ~0.04 m
 `npm run load` generates a deterministic, Zipf-distributed dataset (~120k queries) from
 category word lists, so the queries read like real search phrases and counts follow a
 realistic 1/rank curve. Size is configurable: `node scripts/load-data.js --target 150000`.
+It also marks a handful of queries as recently trending (e.g. `best pizza`, `goa trip`) so
+the Trending feed is populated and the Popularity-vs-Trending toggle shows a difference
+immediately — without that seed activity, a brand-new dataset has nothing trending yet, so
+the two modes would look identical until you submit some searches.
 
 ## Project layout
 
